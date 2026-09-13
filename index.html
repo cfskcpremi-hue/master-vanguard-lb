@@ -58,7 +58,7 @@
             </tr>
           </thead>
           <tbody id="worker-table-body" class="divide-y divide-gray-800 text-sm">
-            <tr><td colspan="4" class="p-6 text-center text-gray-500">Mengecek status worker secara real-time...</td></tr>
+            <tr><td colspan="4" class="p-6 text-center text-gray-500">Memuat status worker real-time...</td></tr>
           </tbody>
         </table>
       </div>
@@ -71,7 +71,7 @@
       btn.textContent = "Checking...";
       try {
         const res = await fetch('/api/status', { cache: 'no-store' });
-        if (!res.ok) throw new Error("Network response was not ok");
+        if (!res.ok) throw new Error("Gagal mengambil data dari server");
         const data = await res.json();
         
         document.getElementById('stat-total').textContent = data.totalWorkers;
