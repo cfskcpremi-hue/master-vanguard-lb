@@ -1,8 +1,31 @@
+// Daftar 19 Worker dan Pages Anda
+const WORKERS_LIST = [
+  "https://wckumaster.pages.dev",
+  "https://keresn.pages.dev",
+  "https://alif.alifdiandra.workers.dev",
+  "https://rahayuku.rahayuskc.workers.dev",
+  "https://kesatu.0u-ts0goso.workers.dev",
+  "https://anehnya.rafifahleo.workers.dev",
+  "https://govindo.pages.dev",
+  "https://miftah.tiktokanita44.workers.dev",
+  "https://parno.c46695766.workers.dev",
+  "https://dewikuskcs.pages.dev",
+  "https://iswanto.nesyaku.workers.dev",
+  "https://kasifaskc.pages.dev",
+  "https://putriku.cyberteamskc.workers.dev",
+  "https://peganti.mahmudibaru02.workers.dev",
+  "https://barulagi.bbmrids.workers.dev",
+  "https://skcyuan.putriskc8.workers.dev",
+  "https://kasifa.khoirila599.workers.dev",
+  "https://nando.skcmahmudi.workers.dev",
+  "https://skcprem.msabaru56.workers.dev"
+];
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
 
-    // 1. Tampilkan UI Dashboard Modern saat diakses di root (https://masterskc.multiskc.eu.cc/)
+    // 1. Tampilkan UI Dashboard Modern saat diakses di domain utama (https://masterskc.multiskc.eu.cc/)
     if (url.pathname === "/" || url.pathname === "/dashboard") {
       return new Response(getDashboardHTML(), {
         headers: { "Content-Type": "text/html;charset=UTF-8" }
@@ -11,10 +34,7 @@ export default {
 
     // 2. API Endpoint untuk mengambil Status Worker & Statistik Data Usage
     if (url.pathname === "/api/status") {
-      const workers = await getWorkersList(request, env);
-      
-      // Cek status kesehatan cepat (ping singkat) untuk tiap worker
-      const workerStatusPromises = workers.map(async (workerUrl) => {
+      const workerStatusPromises = WORKERS_LIST.map(async (workerUrl) => {
         const start = Date.now();
         try {
           const res = await fetch(workerUrl, { method: "HEAD", redirect: "manual" });
@@ -30,13 +50,12 @@ export default {
 
       const results = await Promise.all(workerStatusPromises);
       
-      // Simulasi data usage statistik (bisa dikembangkan sesuai kebutuhan)
       const stats = {
-        totalWorkers: workers.length,
+        totalWorkers: WORKERS_LIST.length,
         activeWorkers: results.filter(w => w.status === "ACTIVE").length,
         limitedWorkers: results.filter(w => w.status === "LIMITED").length,
         deadWorkers: results.filter(w => w.status === "DEAD").length,
-        estimatedDataUsageMB: (Math.random() * 500 + 120).toFixed(2), // Simulasi trafik data berjalan
+        estimatedDataUsageMB: (Math.random() * 400 + 100).toFixed(2),
         workers: results
       };
 
@@ -46,12 +65,7 @@ export default {
     }
 
     // 3. Logika Utama Load Balancer & Auto Failover VPN
-    const workers = await getWorkersList(request, env);
-    if (!workers || workers.length === 0) {
-      return new Response("No workers found in workers.txt", { status: 503 });
-    }
-
-    const randomWorker = workers[Math.floor(Math.random() * workers.length)];
+    const randomWorker = WORKERS_LIST[Math.floor(Math.random() * WORKERS_LIST.length)];
     const targetUrl = new URL(url.pathname + url.search, randomWorker);
 
     const modifiedRequest = new Request(targetUrl, {
@@ -64,9 +78,9 @@ export default {
     try {
       const response = await fetch(modifiedRequest);
 
-      // Jika worker terkena limit (429) atau error server, otomatis pindah ke worker lain
+      // Jika worker terpilih kena limit (429) atau error server, otomatis lempar ke worker lain
       if ([429, 502, 503, 504].includes(response.status)) {
-        const remainingWorkers = workers.filter(w => w !== randomWorker);
+        const remainingWorkers = WORKERS_LIST.filter(w => w !== randomWorker);
         if (remainingWorkers.length > 0) {
           const fallbackWorker = remainingWorkers[Math.floor(Math.random() * remainingWorkers.length)];
           const fallbackUrl = new URL(url.pathname + url.search, fallbackWorker);
@@ -77,7 +91,7 @@ export default {
       return response;
 
     } catch (err) {
-      const remainingWorkers = workers.filter(w => w !== randomWorker);
+      const remainingWorkers = WORKERS_LIST.filter(w => w !== randomWorker);
       if (remainingWorkers.length > 0) {
         const fallbackWorker = remainingWorkers[Math.floor(Math.random() * remainingWorkers.length)];
         const fallbackUrl = new URL(url.pathname + url.search, fallbackWorker);
@@ -88,19 +102,7 @@ export default {
   }
 };
 
-async function getWorkersList(request, env) {
-  try {
-    const assetUrl = new URL("/workers.txt", request.url);
-    const res = await env.ASSETS.fetch(new Request(assetUrl));
-    if (res.ok) {
-      const text = await res.text();
-      return text.split("\n").map(line => line.trim()).filter(line => line.length > 0 && line.startsWith("http"));
-    }
-  } catch (e) {}
-  return ["https://skcpusat.pages.dev"];
-}
-
-// Template HTML UI Dashboard Modern (Cyberpunk / Nordic Theme)
+// Template HTML UI Dashboard
 function getDashboardHTML() {
   return `<!DOCTYPE html>
 <html lang="id">
@@ -122,7 +124,7 @@ function getDashboardHTML() {
     <div class="glass p-6 rounded-2xl flex flex-col md:flex-row justify-between items-center gap-4 shadow-xl">
       <div>
         <h1 class="text-2xl font-bold tracking-wider text-cyan-400">⚡ MASTERSKC VANGUARD LB</h1>
-        <p class="text-sm text-gray-400">Serverless Multi-Worker Load Balancer & Auto-Failover System</p>
+        <p class="text-sm text-gray-400">19 Serverless Worker & Pages Load Balancer System</p>
       </div>
       <button onclick="fetchStatus()" id="refresh-btn" class="px-5 py-2.5 bg-cyan-600 hover:bg-cyan-500 text-white font-semibold rounded-xl transition shadow-lg shadow-cyan-900/40 text-sm">
         🔄 Refresh Status
@@ -152,7 +154,7 @@ function getDashboardHTML() {
     <!-- List Worker Table -->
     <div class="glass rounded-2xl overflow-hidden shadow-xl">
       <div class="p-5 border-b border-gray-800 flex justify-between items-center">
-        <h2 class="font-semibold text-lg text-gray-200">Daftar Status Node Worker & Pages</h2>
+        <h2 class="font-semibold text-lg text-gray-200">Daftar 19 Node Worker & Pages Aktif</h2>
         <span class="text-xs text-cyan-400 animate-pulse">● Live Monitoring</span>
       </div>
       <div class="overflow-x-auto">
@@ -198,11 +200,13 @@ function getDashboardHTML() {
           const tr = document.createElement('tr');
           tr.className = "hover:bg-gray-800/40 transition";
           tr.innerHTML = \`
-            <td class="p-4 text-gray-500 font-mono">\${index + 1}</td>
+            <td class="p-4 text-gray-500 font-mono">\$.replace ? '' : (index + 1)</td>
             <td class="p-4 font-mono text-cyan-300 truncate max-w-xs"><a href="\${w.url}" target="_blank" class="hover:underline">\${w.url}</a></td>
             <td class="p-4 text-gray-300 font-mono">\${w.latency} ms</td>
             <td class="p-4"><span class="px-3 py-1 rounded-full text-xs font-semibold border \${badgeColor}">\${w.status}</span></td>
           \`;
+          // Perbaikan index display sederhana
+          tr.cells[0].textContent = index + 1;
           tbody.appendChild(tr);
         });
       } catch (e) {
@@ -211,7 +215,6 @@ function getDashboardHTML() {
       btn.textContent = "🔄 Refresh Status";
     }
 
-    // Auto load saat dibuka
     fetchStatus();
   </script>
 </body>
