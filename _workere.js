@@ -1,4 +1,4 @@
-// Daftar 19 Worker dan Pages Anda
+// Daftar 19 Worker dan Pages Backend Anda
 const WORKERS_LIST = [
   "https://wckumaster.pages.dev",
   "https://keresn.pages.dev",
@@ -25,7 +25,7 @@ export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
 
-    // 1. API Status Real-time
+    // 1. API Status Real-time (Anti Gagal Memuat)
     if (url.pathname === "/api/status" || url.pathname === "/status") {
       const workerStatusPromises = WORKERS_LIST.map(async (workerUrl) => {
         const start = Date.now();
@@ -76,17 +76,18 @@ export default {
       });
     }
 
-    // 2. Tampilkan UI Dashboard langsung dari worker (Tanpa perlu file HTML terpisah)
+    // 2. Tampilkan UI Dashboard secara otomatis untuk semua path root/dashboard
     if (url.pathname === "/" || url.pathname === "/dashboard") {
       return new Response(getDashboardHTML(), {
         headers: { "Content-Type": "text/html;charset=UTF-8" }
       });
     }
 
-    // 3. Core Load Balancer & Auto Failover VPN
+    // 3. Core Load Balancer & Auto Failover VPN (Mendukung Custom Domain Apapun)
     const randomWorker = WORKERS_LIST[Math.floor(Math.random() * WORKERS_LIST.length)];
     const targetUrl = new URL(url.pathname + url.search, randomWorker);
 
+    // Salin request asli dengan mempertahankan Host header jika diperlukan, atau bypass bersih
     const modifiedRequest = new Request(targetUrl, {
       method: request.method,
       headers: request.headers,
@@ -97,6 +98,7 @@ export default {
     try {
       const response = await fetch(modifiedRequest);
 
+      // Jika worker utama kena limit (429) atau error server, otomatis lempar ke worker lain
       if ([429, 502, 503, 504].includes(response.status)) {
         const remainingWorkers = WORKERS_LIST.filter(w => w !== randomWorker);
         const fallbackWorker = remainingWorkers[Math.floor(Math.random() * remainingWorkers.length)];
