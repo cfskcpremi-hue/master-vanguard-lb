@@ -58,7 +58,7 @@
             </tr>
           </thead>
           <tbody id="worker-table-body" class="divide-y divide-gray-800 text-sm">
-            <tr><td colspan="4" class="p-6 text-center text-gray-500">Memuat status worker...</td></tr>
+            <tr><td colspan="4" class="p-6 text-center text-gray-500">Mengecek status worker secara real-time...</td></tr>
           </tbody>
         </table>
       </div>
@@ -99,11 +99,7 @@
         });
       } catch (e) {
         console.error(e);
-        // Fallback tampilan data statis jika fetch gagal agar UI tidak kosong
-        document.getElementById('stat-total').textContent = "19";
-        document.getElementById('stat-active').textContent = "19";
-        document.getElementById('stat-limited').textContent = "0";
-        document.getElementById('stat-usage').textContent = "142.50 MB";
+        alert("Gagal memuat data status worker.");
       }
       btn.textContent = "🔄 Refresh Status";
     }
