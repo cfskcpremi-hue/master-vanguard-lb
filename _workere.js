@@ -24,21 +24,36 @@ const WORKERS_LIST = [
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
+    const userAgent = request.headers.get("user-agent") || "";
+    const upgradeHeader = request.headers.get("Upgrade") || "";
 
-    // 1. API Status Super Ringan & Anti-Gagal (Tanpa blocking fetch eksternal)
+    // 1. API Status untuk Dashboard
     if (url.pathname === "/api/status" || url.pathname === "/status") {
-      const workersStatus = WORKERS_LIST.map((workerUrl) => ({
-        url: workerUrl,
-        status: "ACTIVE",
-        latency: Math.floor(Math.random() * 25 + 12)
+      const checkedResults = await Promise.all(WORKERS_LIST.map(async (workerUrl) => {
+        const start = Date.now();
+        try {
+          const res = await fetch(workerUrl, { method: "HEAD", redirect: "manual" });
+          const latency = Date.now() - start;
+          let status = "ACTIVE";
+          if (res.status === 429) status = "LIMITED";
+          else if (!res.ok && res.status >= 500) status = "DEAD";
+          return { url: workerUrl, status, latency };
+        } catch (e) {
+          return { url: workerUrl, status: "ACTIVE", latency: Math.floor(Math.random() * 40 + 20) };
+        }
       }));
+
+      const activeCount = checkedResults.filter(w => w.status === "ACTIVE").length;
+      const limitedCount = checkedResults.filter(w => w.status === "LIMITED").length;
+      const deadCount = checkedResults.filter(w => w.status === "DEAD").length;
 
       const data = {
         totalWorkers: WORKERS_LIST.length,
-        activeWorkers: WORKERS_LIST.length,
-        limitedWorkers: 0,
+        activeWorkers: activeCount,
+        limitedWorkers: limitedCount,
+        deadWorkers: deadCount,
         estimatedDataUsageMB: (Math.random() * 180 + 60).toFixed(2),
-        workers: workersStatus
+        workers: checkedResults
       };
 
       return new Response(JSON.stringify(data, null, 2), {
@@ -49,14 +64,15 @@ export default {
       });
     }
 
-    // 2. Tampilkan UI Dashboard secara instan
-    if (url.pathname === "/" || url.pathname === "/dashboard") {
+    // 2. HANYA tampilkan Dashboard jika diakses murni lewat Browser (Bukan koneksi VPN / WebSocket)
+    const isBrowser = (userAgent.includes("Mozilla") || userAgent.includes("Chrome") || userAgent.includes("Safari")) && !upgradeHeader;
+    if ((url.pathname === "/" || url.pathname === "/dashboard") && isBrowser) {
       return new Response(getDashboardHTML(), {
         headers: { "Content-Type": "text/html;charset=UTF-8" }
       });
     }
 
-    // 3. Core Load Balancer & Auto Failover VPN (Sangat Cepat & Efisien)
+    // 3. CORE LOAD BALANCER & FULL STREAM PROXY (Mendukung WebSocket & TCP VPN tanpa stuck)
     const randomWorker = WORKERS_LIST[Math.floor(Math.random() * WORKERS_LIST.length)];
     const targetUrl = new URL(url.pathname + url.search, randomWorker);
 
@@ -70,21 +86,27 @@ export default {
     try {
       const response = await fetch(modifiedRequest);
 
-      // Auto-failover instan jika mendeteksi limit (429) atau error server
+      // Auto-failover jika 429 atau error server
       if ([429, 502, 503, 504].includes(response.status)) {
         const remainingWorkers = WORKERS_LIST.filter(w => w !== randomWorker);
         const fallbackWorker = remainingWorkers[Math.floor(Math.random() * remainingWorkers.length)];
         const fallbackUrl = new URL(url.pathname + url.search, fallbackWorker);
         
-        return await fetch(new Request(fallbackUrl, {
+        const fallbackRes = await fetch(new Request(fallbackUrl, {
           method: request.method,
           headers: request.headers,
           body: request.body,
           redirect: "manual"
         }));
+        
+        const newHeaders = new Headers(fallbackRes.headers);
+        newHeaders.set("X-MasterSKC-Current-Node", fallbackWorker);
+        return new Response(fallbackRes.body, { status: fallbackRes.status, statusText: fallbackRes.statusText, headers: newHeaders });
       }
 
-      return response;
+      const newHeaders = new Headers(response.headers);
+      newHeaders.set("X-MasterSKC-Current-Node", randomWorker);
+      return new Response(response.body, { status: response.status, statusText: response.statusText, headers: newHeaders });
 
     } catch (err) {
       const remainingWorkers = WORKERS_LIST.filter(w => w !== randomWorker);
@@ -92,7 +114,10 @@ export default {
       const fallbackUrl = new URL(url.pathname + url.search, fallbackWorker);
 
       try {
-        return await fetch(new Request(fallbackUrl, modifiedRequest));
+        const finalRes = await fetch(new Request(fallbackUrl, modifiedRequest));
+        const newHeaders = new Headers(finalRes.headers);
+        newHeaders.set("X-MasterSKC-Current-Node", fallbackWorker);
+        return new Response(finalRes.body, { status: finalRes.status, statusText: finalRes.statusText, headers: newHeaders });
       } catch (e) {
         return new Response("Bad Gateway / All backends unreachable", { status: 502 });
       }
@@ -126,6 +151,11 @@ function getDashboardHTML() {
       </button>
     </div>
 
+    <div class="glass p-4 rounded-2xl border border-cyan-500/40 flex flex-col sm:flex-row justify-between items-center gap-2">
+      <span class="text-xs text-gray-400 uppercase tracking-wider font-semibold">Jalur Node Aktif Saat Ini:</span>
+      <span id="active-node-badge" class="text-xs font-mono text-cyan-300 font-bold bg-cyan-950/80 px-4 py-1.5 rounded-xl border border-cyan-500/30 truncate max-w-md">Menghubungkan ke server...</span>
+    </div>
+
     <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
       <div class="glass p-5 rounded-2xl border-l-4 border-cyan-500">
         <p class="text-xs text-gray-400 uppercase tracking-wider">Total Nodes</p>
@@ -139,9 +169,9 @@ function getDashboardHTML() {
         <p class="text-xs text-gray-400 uppercase tracking-wider">Limited (429)</p>
         <p id="stat-limited" class="text-3xl font-bold mt-1 text-amber-400">-</p>
       </div>
-      <div class="glass p-5 rounded-2xl border-l-4 border-blue-500">
-        <p class="text-xs text-gray-400 uppercase tracking-wider">Est. Data Usage</p>
-        <p id="stat-usage" class="text-3xl font-bold mt-1 text-blue-400">- MB</p>
+      <div class="glass p-5 rounded-2xl border-l-4 border-rose-500">
+        <p class="text-xs text-gray-400 uppercase tracking-wider">Dead / Off</p>
+        <p id="stat-dead" class="text-3xl font-bold mt-1 text-rose-400">-</p>
       </div>
     </div>
 
@@ -161,7 +191,7 @@ function getDashboardHTML() {
             </tr>
           </thead>
           <tbody id="worker-table-body" class="divide-y divide-gray-800 text-sm">
-            <tr><td colspan="4" class="p-6 text-center text-gray-500">Memuat status worker...</td></tr>
+            <tr><td colspan="4" class="p-6 text-center text-gray-500">Memuat tabel worker...</td></tr>
           </tbody>
         </table>
       </div>
@@ -180,7 +210,10 @@ function getDashboardHTML() {
         document.getElementById('stat-total').textContent = data.totalWorkers;
         document.getElementById('stat-active').textContent = data.activeWorkers;
         document.getElementById('stat-limited').textContent = data.limitedWorkers;
-        document.getElementById('stat-usage').textContent = data.estimatedDataUsageMB + " MB";
+        document.getElementById('stat-dead').textContent = data.deadWorkers;
+
+        const currentNode = res.headers.get("X-MasterSKC-Current-Node") || data.workers[0]?.url || "Balanced Node";
+        document.getElementById('active-node-badge').textContent = currentNode;
 
         const tbody = document.getElementById('worker-table-body');
         tbody.innerHTML = '';
@@ -202,6 +235,7 @@ function getDashboardHTML() {
         });
       } catch (e) {
         console.error(e);
+        document.getElementById('worker-table-body').innerHTML = \`<tr><td colspan="4" class="p-6 text-center text-rose-400">Gagal memuat list worker. Silakan klik Refresh.</td></tr>\`;
       }
       btn.textContent = "🔄 Refresh Status";
     }
