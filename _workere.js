@@ -97,7 +97,7 @@ async function getWorkersList(request, env) {
       return text.split("\n").map(line => line.trim()).filter(line => line.length > 0 && line.startsWith("http"));
     }
   } catch (e) {}
-  return ["https://worker-1.workers.dev"];
+  return ["https://skcpusat.pages.dev"];
 }
 
 // Template HTML UI Dashboard Modern (Cyberpunk / Nordic Theme)
