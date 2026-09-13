@@ -25,14 +25,12 @@ export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
 
-    // 1. Tampilkan UI Dashboard Modern saat diakses di domain utama (https://masterskc.multiskc.eu.cc/)
     if (url.pathname === "/" || url.pathname === "/dashboard") {
       return new Response(getDashboardHTML(), {
         headers: { "Content-Type": "text/html;charset=UTF-8" }
       });
     }
 
-    // 2. API Endpoint untuk mengambil Status Worker & Statistik Data Usage
     if (url.pathname === "/api/status") {
       const workerStatusPromises = WORKERS_LIST.map(async (workerUrl) => {
         const start = Date.now();
@@ -64,7 +62,6 @@ export default {
       });
     }
 
-    // 3. Logika Utama Load Balancer & Auto Failover VPN
     const randomWorker = WORKERS_LIST[Math.floor(Math.random() * WORKERS_LIST.length)];
     const targetUrl = new URL(url.pathname + url.search, randomWorker);
 
@@ -78,7 +75,6 @@ export default {
     try {
       const response = await fetch(modifiedRequest);
 
-      // Jika worker terpilih kena limit (429) atau error server, otomatis lempar ke worker lain
       if ([429, 502, 503, 504].includes(response.status)) {
         const remainingWorkers = WORKERS_LIST.filter(w => w !== randomWorker);
         if (remainingWorkers.length > 0) {
@@ -102,7 +98,6 @@ export default {
   }
 };
 
-// Template HTML UI Dashboard
 function getDashboardHTML() {
   return `<!DOCTYPE html>
 <html lang="id">
@@ -119,8 +114,6 @@ function getDashboardHTML() {
 </head>
 <body class="min-h-screen p-4 md:p-8">
   <div class="max-w-5xl mx-auto space-y-6">
-    
-    <!-- Header -->
     <div class="glass p-6 rounded-2xl flex flex-col md:flex-row justify-between items-center gap-4 shadow-xl">
       <div>
         <h1 class="text-2xl font-bold tracking-wider text-cyan-400">⚡ MASTERSKC VANGUARD LB</h1>
@@ -131,7 +124,6 @@ function getDashboardHTML() {
       </button>
     </div>
 
-    <!-- Statistik Cards -->
     <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
       <div class="glass p-5 rounded-2xl border-l-4 border-cyan-500">
         <p class="text-xs text-gray-400 uppercase tracking-wider">Total Nodes</p>
@@ -151,7 +143,6 @@ function getDashboardHTML() {
       </div>
     </div>
 
-    <!-- List Worker Table -->
     <div class="glass rounded-2xl overflow-hidden shadow-xl">
       <div class="p-5 border-b border-gray-800 flex justify-between items-center">
         <h2 class="font-semibold text-lg text-gray-200">Daftar 19 Node Worker & Pages Aktif</h2>
@@ -173,7 +164,6 @@ function getDashboardHTML() {
         </table>
       </div>
     </div>
-
   </div>
 
   <script>
@@ -200,13 +190,11 @@ function getDashboardHTML() {
           const tr = document.createElement('tr');
           tr.className = "hover:bg-gray-800/40 transition";
           tr.innerHTML = \`
-            <td class="p-4 text-gray-500 font-mono">\$.replace ? '' : (index + 1)</td>
+            <td class="p-4 text-gray-500 font-mono">\${index + 1}</td>
             <td class="p-4 font-mono text-cyan-300 truncate max-w-xs"><a href="\${w.url}" target="_blank" class="hover:underline">\${w.url}</a></td>
             <td class="p-4 text-gray-300 font-mono">\${w.latency} ms</td>
             <td class="p-4"><span class="px-3 py-1 rounded-full text-xs font-semibold border \${badgeColor}">\${w.status}</span></td>
           \`;
-          // Perbaikan index display sederhana
-          tr.cells[0].textContent = index + 1;
           tbody.appendChild(tr);
         });
       } catch (e) {
