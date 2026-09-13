@@ -25,20 +25,49 @@ export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
 
-    // 1. API Status Super Cepat & Ringan (Anti-Timeout)
+    // 1. API Status Real-time (Mengecek kondisi asli 19 worker)
     if (url.pathname === "/api/status" || url.pathname === "/status") {
-      const workersStatus = WORKERS_LIST.map((workerUrl) => ({
-        url: workerUrl,
-        status: "ACTIVE",
-        latency: Math.floor(Math.random() * 25 + 10) // Latensi stabil aman
-      }));
+      const workerStatusPromises = WORKERS_LIST.map(async (workerUrl) => {
+        const start = Date.now();
+        try {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 4000); // Timeout 4 detik
+          
+          const res = await fetch(workerUrl, { 
+            method: "HEAD", 
+            redirect: "manual",
+            signal: controller.signal 
+          });
+          clearTimeout(timeoutId);
+          
+          const latency = Date.now() - start;
+          let status = "ACTIVE";
+          
+          if (res.status === 429) {
+            status = "LIMITED";
+          } else if (!res.ok && res.status >= 500) {
+            status = "DEAD";
+          }
+          
+          return { url: workerUrl, status, latency };
+        } catch (e) {
+          return { url: workerUrl, status: "DEAD", latency: 0 };
+        }
+      });
+
+      const results = await Promise.all(workerStatusPromises);
+      
+      const activeCount = results.filter(w => w.status === "ACTIVE").length;
+      const limitedCount = results.filter(w => w.status === "LIMITED").length;
+      const deadCount = results.filter(w => w.status === "DEAD").length;
 
       const data = {
         totalWorkers: WORKERS_LIST.length,
-        activeWorkers: WORKERS_LIST.length,
-        limitedWorkers: 0,
+        activeWorkers: activeCount,
+        limitedWorkers: limitedCount,
+        deadWorkers: deadCount,
         estimatedDataUsageMB: (Math.random() * 200 + 50).toFixed(2),
-        workers: workersStatus
+        workers: results
       };
 
       return new Response(JSON.stringify(data, null, 2), {
@@ -54,7 +83,7 @@ export default {
       return env.ASSETS.fetch(request);
     }
 
-    // 3. Core Load Balancer & Auto Failover VPN (Sangat Ringan & Efisien)
+    // 3. Core Load Balancer & Auto Failover VPN
     const randomIndex = Math.floor(Math.random() * WORKERS_LIST.length);
     const primaryWorker = WORKERS_LIST[randomIndex];
     const targetUrl = new URL(url.pathname + url.search, primaryWorker);
@@ -69,7 +98,7 @@ export default {
     try {
       const response = await fetch(modifiedRequest);
 
-      // Jika worker utama terkena limit (429) atau error server, otomatis alihkan ke worker berikutnya
+      // Jika worker utama kena limit (429) atau error server, otomatis pindah ke worker lain
       if ([429, 502, 503, 504].includes(response.status)) {
         const remainingWorkers = WORKERS_LIST.filter(w => w !== primaryWorker);
         const fallbackWorker = remainingWorkers[Math.floor(Math.random() * remainingWorkers.length)];
@@ -86,7 +115,6 @@ export default {
       return response;
 
     } catch (err) {
-      // Fallback darurat jika koneksi worker utama putus total
       const remainingWorkers = WORKERS_LIST.filter(w => w !== primaryWorker);
       const fallbackWorker = remainingWorkers[Math.floor(Math.random() * remainingWorkers.length)];
       const fallbackUrl = new URL(url.pathname + url.search, fallbackWorker);
